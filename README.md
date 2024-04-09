@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-pip3 install markdown Pygments werobot pyquery
+pip install markdown Pygments werobot pyquery
 ```
 
 ## 配置白名单和 token

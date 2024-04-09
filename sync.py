@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 ##public/upload_news.py
 # -*- coding: utf-8 -*-
 """
@@ -151,9 +151,9 @@ def fetch_attr(content, key):
     return ""
 
 def render_markdown(content):
-    exts = ['markdown.extensions.extra', 
+    exts = ['markdown.extensions.extra',
             'markdown.extensions.tables',
-            'markdown.extensions.toc', 
+            'markdown.extensions.toc',
             'markdown.extensions.sane_lists',
             codehilite.makeExtension(
                 guess_lang=False,
@@ -236,10 +236,11 @@ def fix_image(content):
     return content
 
 def format_fix(content):
-    content = content.replace("<ul>\n<li>", "<ul><li>")
-    content = content.replace("</li>\n</ul>", "</li></ul>")
-    content = content.replace("<ol>\n<li>", "<ol><li>")
-    content = content.replace("</li>\n</ol>", "</li></ol>")
+    # content = content.replace("<ul>\n<li>", "<ul><p></p><li>")
+    # content = content.replace("</li>\n</ul>", "</li></ul>")
+    # content = content.replace("<ol>\n<li>", "<ol><li>")
+    # content = content.replace("</li>\n</ol>", "</li></ol>")
+    content = content.replace("</li>", "</li>\n<p></p>")
     content = content.replace("background: #272822", gen_css("code"))
     content = content.replace("""<pre style="line-height: 125%">""", """<pre style="line-height: 125%; color: white; font-size: 11px;">""")
     return content

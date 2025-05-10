@@ -32,9 +32,10 @@ import alibabaOss as alio
 CACHE = {}
 
 CACHE_STORE = "cache.bin"
+OSS_MD_PREFIX = ""
 
 try:
-    SOURCE = alio.initializeBucket()
+    SOURCE = alio.initialize_Bucket()
     print("Got file sources")
 except Exception as e:
     print(f"Failed to get source: {e}")
@@ -87,58 +88,68 @@ def cache_get(key):
     return None
 
 
-def file_digest(file_path):
+def file_digest(file_path, is_local):
     """
     计算文件的md5值
     """
     md5 = hashlib.md5()
-    with open(file_path, 'rb') as f:
-        md5.update(f.read())
+    if not is_local:
+        try:
+            # Get object in streaming mode
+            result = SOURCE.read_object_content(file_path, encoding = '')
+            md5.update(result)
+        except Exception as e:
+            print(f"Error calculating digest for OSS object {file_path}: {e}")
+            return None
+    else:
+        with open(file_path, 'rb') as f:
+            md5.update(f.read())
+
     return md5.hexdigest()
 
-def cache_update(file_path):
-    digest = file_digest(file_path)
+def cache_update(file_path, is_local):
+    digest = file_digest(file_path, is_local)
     CACHE[digest] = "{}:{}".format(file_path, datetime.now())
     dump_cache()
 
-def file_processed(file_path):
-    digest = file_digest(file_path)
+def file_processed(file_path, is_local):
+    digest = file_digest(file_path, is_local)
     return cache_get(digest) != None
 
 def upload_image_from_path(image_path):
-  image_digest = file_digest(image_path)
-  res = cache_get(image_digest)
-  if res != None:
-      return res[0], res[1]
-  client, _ = Client()
-  print("uploading image {}".format(image_path))
-  try:
-    media_json = client.upload_permanent_media("image", open(image_path, "rb")) ##永久素材
-    media_id = media_json['media_id']
-    media_url = media_json['url']
-    CACHE[image_digest] = [media_id, media_url]
-    dump_cache()
-    print("file: {} => media_id: {}".format(image_path, media_id))
-    return media_id, media_url
-  except Exception as e:
-    print("upload image error: {}".format(e))
-    return None, None
+    image_digest = file_digest(image_path, True)
+    res = cache_get(image_digest)
+    if res != None:
+        return res[0], res[1]
+    client, _ = Client()
+    print("uploading image {}".format(image_path))
+    try:
+        media_json = client.upload_permanent_media("image", open(image_path, "rb")) ##永久素材
+        media_id = media_json['media_id']
+        media_url = media_json['url']
+        CACHE[image_digest] = [media_id, media_url]
+        dump_cache()
+        print("file: {} => media_id: {}".format(image_path, media_id))
+        return media_id, media_url
+    except Exception as e:
+        print("upload image error: {}".format(e))
+        return None, None
 
 def upload_image(img_url):
-  """
-  * 上传临时素材
-  * 1、临时素材media_id是可复用的。
-  * 2、媒体文件在微信后台保存时间为3天，即3天后media_id失效。
-  * 3、上传临时素材的格式、大小限制与公众平台官网一致。
-  """
-  resource = urllib.request.urlopen(img_url)
-  name = img_url.split("/")[-1]
-  f_name = "/tmp/{}".format(name)
-  if "." not in f_name:
-    f_name = f_name + ".png"
-  with open(f_name, 'wb') as f:
-    f.write(resource.read())
-  return upload_image_from_path(f_name)
+    """
+    * 上传临时素材
+    * 1、临时素材media_id是可复用的。
+    * 2、媒体文件在微信后台保存时间为3天，即3天后media_id失效。
+    * 3、上传临时素材的格式、大小限制与公众平台官网一致。
+    """
+    resource = urllib.request.urlopen(img_url)
+    name = img_url.split("/")[-1]
+    f_name = "/tmp/{}".format(name)
+    if "." not in f_name:
+        f_name = f_name + ".png"
+    with open(f_name, 'wb') as f:
+        f.write(resource.read())
+    return upload_image_from_path(f_name)
 
 def get_images_from_markdown(content):
     lines = content.split('\n')
@@ -161,6 +172,7 @@ def fetch_attr(content, key):
     return ""
 
 def render_markdown(content):
+    print ("About to render content: " + content)
     exts = ['markdown.extensions.extra',
             'markdown.extensions.tables',
             'markdown.extensions.toc',
@@ -170,7 +182,15 @@ def render_markdown(content):
                 noclasses=True,
                 pygments_style='monokai'
             ),]
-    post =  "".join(content.split("---\n")[2:])
+    post =  "".join(content.split("---")[2:])
+    '''
+    if content.split("---\n"):
+        print ("part of ---\n " + str(len(content.split("---\n"))))
+
+    if content.split("---"):
+        print ("part of --- " + str(len(content.split("---"))))
+    '''
+    print ("after post: " + post)
     html = markdown.markdown(post, extensions=exts)
     open("origi.html", "w").write(html)
     return css_beautify(html)
@@ -265,39 +285,37 @@ def css_beautify(content):
     return content
 
 
-def upload_media_news(post_path):
+def upload_media_news(object_key):
     """
     上传到微信公众号素材
     """
-    content = open (post_path , 'r').read()
+    content = SOURCE.read_object_content(object_key)
     TITLE = fetch_attr(content, 'title').strip('"').strip('\'')
     gen_cover = fetch_attr(content, 'gen_cover').strip('"')
     images = get_images_from_markdown(content)
     print(TITLE)
+
     if len(images) == 0 or gen_cover == "true" :
         letters = string.ascii_lowercase
         seed = ''.join(random.choice(letters) for i in range(10))
         print(seed)
         images = ["https://picsum.photos/seed/" + seed + "/400/600"] + images
+
     uploaded_images = {}
     for image in images:
         media_id = ''
         media_url = ''
-        if image.startswith("http"):
-            media_id, media_url = upload_image(image)
-        else:
-            media_id, media_url = upload_image_from_path("./blog-source/source" + image)
+        media_id, media_url = upload_image(image)
         if media_id != None:
             uploaded_images[image] = [media_id, media_url]
 
     content = update_images_urls(content, uploaded_images)
 
     THUMB_MEDIA_ID = (len(images) > 0 and uploaded_images[images[0]][0]) or ''
-    AUTHOR = 'yukang'
+    AUTHOR = 'MY_NAME'
     RESULT = render_markdown(content)
-    link = os.path.basename(post_path).replace('.md', '')
     digest = fetch_attr(content, 'subtitle').strip().strip('"').strip('\'')
-    CONTENT_SOURCE_URL = 'https://catcoding.me/p/{}'.format(link)
+    CONTENT_SOURCE_URL = 'https://www.setyoururl.com'
 
     articles = {
         'articles':
@@ -327,30 +345,30 @@ def upload_media_news(post_path):
     postUrl = "https://api.weixin.qq.com/cgi-bin/draft/add?access_token=%s" % token
     r = requests.post(postUrl, data=datas, headers=headers)
     resp = json.loads(r.text)
-    print(resp)
+    #print(resp)
     media_id = resp['media_id']
-    cache_update(post_path)
+    cache_update(object_key, False)
     return resp
 
 def run(string_date):
     #string_date = "2023-03-13"
     print(string_date)
-    for obj in oss2.ObjectIterator(bucket, prefix=OSS_MD_PREFIX):
+    for obj in SOURCE.iterate_object_at(OSS_MD_PREFIX):
         object_key = obj.key
-        if not object_key.lower().endswith('.md') continue
+        if not object_key.lower().endswith('.md'): continue
         print(f"Processing object: {object_key}")
 
-        content = read_oss_object_content(object_key)
+        content = SOURCE.read_object_content(object_key)
         if content is None:
             print(f"Skipping {object_key} due to read error.")
             continue
         date_attr = fetch_attr(content, 'date').strip()
-        if string_date in date:
-            if file_processed(path_str):
-                print("{} has been processed".format(path_str))
+        if string_date in date_attr:
+            if file_processed(object_key, False):
+                print("{} has been processed".format(object_key))
                 continue
-            print(path_str)
-            news_json = upload_media_news(path_str)
+            print(object_key)
+            news_json = upload_media_news(object_key)
             print(news_json)
             print('successful')
 

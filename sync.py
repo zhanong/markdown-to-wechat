@@ -26,9 +26,18 @@ import urllib.request
 import random
 import string
 
+import alibabaOss as alio
+
 CACHE = {}
 
 CACHE_STORE = "cache.bin"
+
+try:
+    SOURCE = alio.initializeBucket()
+    print("Got file sources")
+except Exception as e:
+    print(f"Failed to get source: {e}")
+    exit(1)
 
 def dump_cache():
     fp = open(CACHE_STORE, "wb")
@@ -325,6 +334,30 @@ def upload_media_news(post_path):
 def run(string_date):
     #string_date = "2023-03-13"
     print(string_date)
+    for obj in oss2.ObjectIterator(bucket, prefix=OSS_MD_PREFIX):
+        object_key = obj.key
+        if not object_key.lower().endswith('.md') continue
+        print(f"Processing object: {object_key}")
+
+        content = read_oss_object_content(object_key)
+        if content is None:
+            print(f"Skipping {object_key} due to read error.")
+            continue
+        date_attr = fetch_attr(content, 'date').strip()
+        if string_date in date:
+            if file_processed(path_str):
+                print("{} has been processed".format(path_str))
+                continue
+            print(path_str)
+            news_json = upload_media_news(path_str)
+            print(news_json);
+            print('successful')
+
+'''
+def run(string_date):
+    #string_date = "2023-03-13"
+    print(string_date)
+        
     pathlist = Path("/root").glob('**/*.md')
     for path in pathlist:
         path_str = str(path)
@@ -339,14 +372,17 @@ def run(string_date):
             news_json = upload_media_news(path_str)
             print(news_json);
             print('successful')
+'''
 
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
         yield start_date + timedelta(n)
 
+
 if __name__ == '__main__':
     print("begin sync to wechat")
     init_cache()
+        
     start_time = time.time() # 开始时间
     for x in daterange(datetime.now() - timedelta(days=7), datetime.now() + timedelta(days=2)):
         print("start time: {}".format(x.strftime("%m/%d/%Y, %H:%M:%S")))

@@ -2,6 +2,7 @@
 ##public/upload_news.py
 # -*- coding: utf-8 -*-
 """
+hello baby
 推送文章到微信公众号
 """
 from calendar import c
@@ -350,7 +351,7 @@ def run(string_date):
                 continue
             print(path_str)
             news_json = upload_media_news(path_str)
-            print(news_json);
+            print(news_json)
             print('successful')
 
 '''

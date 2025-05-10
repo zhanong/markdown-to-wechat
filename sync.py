@@ -325,7 +325,7 @@ def upload_media_news(post_path):
 def run(string_date):
     #string_date = "2023-03-13"
     print(string_date)
-    pathlist = Path("./blog-source/source/_posts").glob('**/*.md')
+    pathlist = Path("https://github.com/zhanong/markdown-to-wechat/blob/main").glob('**/*.md')
     for path in pathlist:
         path_str = str(path)
         content = open (path_str , 'r').read()

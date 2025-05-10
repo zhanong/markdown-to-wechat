@@ -328,6 +328,7 @@ def run(string_date):
     pathlist = Path("https://github.com/zhanong/markdown-to-wechat/blob/main").glob('**/*.md')
     for path in pathlist:
         path_str = str(path)
+        print('reading ' + path_str)
         content = open (path_str , 'r').read()
         date = fetch_attr(content, 'date').strip()
         if string_date in date:

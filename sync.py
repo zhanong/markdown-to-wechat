@@ -325,7 +325,7 @@ def upload_media_news(post_path):
 def run(string_date):
     #string_date = "2023-03-13"
     print(string_date)
-    pathlist = Path("./root").glob('**/*.md')
+    pathlist = Path("/root").glob('**/*.md')
     for path in pathlist:
         path_str = str(path)
         print('reading ' + path_str)

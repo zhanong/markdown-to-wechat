@@ -27,15 +27,15 @@ import urllib.request
 import random
 import string
 
-import alibabaOss as alio
+from source_getter import local as sg
 
 CACHE = {}
 
 CACHE_STORE = "cache.bin"
-OSS_MD_PREFIX = ""
+FILE_FOLDER_PATH = "/home/n8n/filerw/_blogdigest"
 
 try:
-    SOURCE = alio.initialize_Bucket()
+    SOURCE = sg.initialize()
     print("Got file sources")
 except Exception as e:
     print(f"Failed to get source: {e}")
@@ -199,7 +199,7 @@ def update_images_urls(content, uploaded_images):
     for image, meta in uploaded_images.items():
         orig = "({})".format(image)
         new = "({})".format(meta[1])
-        #print("{} -> {}".format(orig, new))
+        print("{} -> {}".format(orig, new))
         content = content.replace(orig, new)
     return content
 
@@ -353,7 +353,7 @@ def upload_media_news(object_key):
 def run(string_date):
     #string_date = "2023-03-13"
     print(string_date)
-    for obj in SOURCE.iterate_object_at(OSS_MD_PREFIX):
+    for obj in SOURCE.iterate_object_at(FILE_FOLDER_PATH):
         object_key = obj.key
         if not object_key.lower().endswith('.md'): continue
         print(f"Processing object: {object_key}")
@@ -371,27 +371,6 @@ def run(string_date):
             news_json = upload_media_news(object_key)
             print(news_json)
             print('successful')
-
-'''
-def run(string_date):
-    #string_date = "2023-03-13"
-    print(string_date)
-        
-    pathlist = Path("/root").glob('**/*.md')
-    for path in pathlist:
-        path_str = str(path)
-        print('reading ' + path_str)
-        content = open (path_str , 'r').read()
-        date = fetch_attr(content, 'date').strip()
-        if string_date in date:
-            if file_processed(path_str):
-                print("{} has been processed".format(path_str))
-                continue
-            print(path_str)
-            news_json = upload_media_news(path_str)
-            print(news_json);
-            print('successful')
-'''
 
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):

@@ -28,11 +28,18 @@ import random
 import string
 
 from source_getter import local as sg
+from content_formatter import blogdigest_formatter as cf
 
 CACHE = {}
 
 CACHE_STORE = "cache.bin"
-FILE_FOLDER_PATH = "/home/n8n/filerw/_blogdigest"
+FILE_FOLDER_PATH = "/home/n8n/file_rw/blogdigest/markdown"
+# TIME_STAMP = datetime.today().strftime("%Y-%m-%d")
+# MD_PATH = FILE_FOLDER_PATH + "/" + TIME_STAMP + ".md"
+
+COVER_IMAGE_DIR = "/home/processing-exp/"
+
+CURRNT_MD_NAME = ""
 
 try:
     SOURCE = sg.initialize()
@@ -172,7 +179,6 @@ def fetch_attr(content, key):
     return ""
 
 def render_markdown(content):
-    print ("About to render content: " + content)
     exts = ['markdown.extensions.extra',
             'markdown.extensions.tables',
             'markdown.extensions.toc',
@@ -183,17 +189,9 @@ def render_markdown(content):
                 pygments_style='monokai'
             ),]
     post =  "".join(content.split("---")[2:])
-    '''
-    if content.split("---\n"):
-        print ("part of ---\n " + str(len(content.split("---\n"))))
-
-    if content.split("---"):
-        print ("part of --- " + str(len(content.split("---"))))
-    '''
-    print ("after post: " + post)
     html = markdown.markdown(post, extensions=exts)
-    open("origi.html", "w").write(html)
-    return css_beautify(html)
+    open("/home/repo/markdown-to-wechat/origi.html", "w").write(html)
+    return cf.beautify(html, CURRENT_MD_NAME)
 
 def update_images_urls(content, uploaded_images):
     for image, meta in uploaded_images.items():
@@ -203,119 +201,41 @@ def update_images_urls(content, uploaded_images):
         content = content.replace(orig, new)
     return content
 
-def replace_para(content):
-    res = []
-    for line in content.split("\n"):
-        if line.startswith("<p>"):
-            line = line.replace("<p>", gen_css("para"))
-        res.append(line)
-    return "\n".join(res)
-
-def gen_css(path, *args):
-    tmpl = open("./assets/{}.tmpl".format(path), "r").read()
-    return tmpl.format(*args)
-
-def replace_header(content):
-    res = []
-    for line in content.split("\n"):
-        l = line.strip()
-        if l.startswith("<h") and l.endswith(">") > 0:
-            tag = l.split(' ')[0].replace('<', '')
-            value = l.split('>')[1].split('<')[0]
-            digit = tag[1]
-            font =  (18 + (4 - int(tag[1])) * 2) if (digit >= '0' and digit <= '9') else 18
-            res.append(gen_css("sub", tag, font, value, tag))
-        else:
-            res.append(line)
-    return "\n".join(res)
-
-def replace_links(content):
-    pq = PyQuery(open('origi.html').read())
-    links = pq('a')
-    refs = []
-    index = 1
-    if len(links) == 0:
-        return content
-    for l in links.items():
-        link = gen_css("link", l.text(), index)
-        index += 1
-        refs.append([l.attr('href'), l.text(), link])
-
-    for r in refs:
-        orig = "<a href=\"{}\">{}</a>".format(html.escape(r[0]), r[1])
-        print(orig)
-        content = content.replace(orig, r[2])
-    content = content + "\n" + gen_css("ref_header")
-    content = content + """<section class="footnotes">"""
-    index = 1
-    for r in refs:
-        l = r[2]
-        line = gen_css("ref_link", index, r[1], r[0])
-        index += 1
-        content += line + "\n"
-    content = content + "</section>"
-    return content
-
-def fix_image(content):
-    pq = PyQuery(open('origi.html').read())
-    imgs = pq('img')
-    for line in imgs.items():
-        link = """<img alt="{}" src="{}" />""".format(line.attr('alt'), line.attr('src'))
-        figure = gen_css("figure", link, line.attr('alt'))
-        content = content.replace(link, figure)
-    return content
-
-def format_fix(content):
-    # content = content.replace("<ul>\n<li>", "<ul><p></p><li>")
-    # content = content.replace("</li>\n</ul>", "</li></ul>")
-    # content = content.replace("<ol>\n<li>", "<ol><li>")
-    # content = content.replace("</li>\n</ol>", "</li></ol>")
-    content = content.replace("</li>", "</li>\n<p></p>")
-    content = content.replace("background: #272822", gen_css("code"))
-    content = content.replace("""<pre style="line-height: 125%">""", """<pre style="line-height: 125%; color: white; font-size: 11px;">""")
-    return content
-
-def css_beautify(content):
-    content = replace_para(content)
-    content = replace_header(content)
-    content = replace_links(content)
-    content = format_fix(content)
-    content = fix_image(content)
-    content = gen_css("header") + content + "</section>"
-    return content
-
-
 def upload_media_news(object_key):
     """
     上传到微信公众号素材
     """
     content = SOURCE.read_object_content(object_key)
     TITLE = fetch_attr(content, 'title').strip('"').strip('\'')
-    gen_cover = fetch_attr(content, 'gen_cover').strip('"')
     images = get_images_from_markdown(content)
     print(TITLE)
 
+    '''
     if len(images) == 0 or gen_cover == "true" :
         letters = string.ascii_lowercase
         seed = ''.join(random.choice(letters) for i in range(10))
         print(seed)
         images = ["https://picsum.photos/seed/" + seed + "/400/600"] + images
+    '''
+    images = [COVER_IMAGE_DIR + CURRENT_MD_NAME + ".png"] + images
 
     uploaded_images = {}
     for image in images:
         media_id = ''
         media_url = ''
-        media_id, media_url = upload_image(image)
+        if image.startswith("http"):
+            media_id, media_url = upload_image(image)
+        else:
+            media_id, media_url = upload_image_from_path(image)
         if media_id != None:
             uploaded_images[image] = [media_id, media_url]
 
     content = update_images_urls(content, uploaded_images)
 
     THUMB_MEDIA_ID = (len(images) > 0 and uploaded_images[images[0]][0]) or ''
-    AUTHOR = 'MY_NAME'
     RESULT = render_markdown(content)
     digest = fetch_attr(content, 'subtitle').strip().strip('"').strip('\'')
-    CONTENT_SOURCE_URL = 'https://www.setyoururl.com'
+    CONTENT_SOURCE_URL = ''
 
     articles = {
         'articles':
@@ -323,7 +243,6 @@ def upload_media_news(object_key):
             {
                 "title": TITLE,
                 "thumb_media_id": THUMB_MEDIA_ID,
-                "author": AUTHOR,
                 "digest": digest,
                 "show_cover_pic": 1,
                 "content": RESULT,
@@ -345,19 +264,22 @@ def upload_media_news(object_key):
     postUrl = "https://api.weixin.qq.com/cgi-bin/draft/add?access_token=%s" % token
     r = requests.post(postUrl, data=datas, headers=headers)
     resp = json.loads(r.text)
-    #print(resp)
+    print(resp)
     media_id = resp['media_id']
     cache_update(object_key, False)
     return resp
 
-def run(string_date):
+def run(string_date, file_folder_path):
     #string_date = "2023-03-13"
+    
     print(string_date)
-    for obj in SOURCE.iterate_object_at(FILE_FOLDER_PATH):
+    for obj in SOURCE.iterate_object_at(file_folder_path):
         object_key = obj.key
         if not object_key.lower().endswith('.md'): continue
         print(f"Processing object: {object_key}")
-
+        global CURRENT_MD_NAME
+        CURRENT_MD_NAME  = Path(object_key).stem
+        
         content = SOURCE.read_object_content(object_key)
         if content is None:
             print(f"Skipping {object_key} due to read error.")
@@ -386,6 +308,6 @@ if __name__ == '__main__':
         print("start time: {}".format(x.strftime("%m/%d/%Y, %H:%M:%S")))
         string_date = x.strftime('%Y-%m-%d')
         print(string_date)
-        run(string_date)
+        run(string_date, FILE_FOLDER_PATH)
     end_time = time.time() #结束时间
     print("程序耗时%f秒." % (end_time - start_time))
